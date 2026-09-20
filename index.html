@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Study Planner | Smart Schedule & Hour Recommendation</title>
+  <meta name="description"
+    content="Intelligent study planner for AIML and computer science students. Calculate subject priorities, optimize daily study hours, and generate interactive timetables.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="./static/css/style.css">
+</head>
+
+<body>
+  <!-- Ambient background glow layers -->
+  <div class="bg-glow glow-1"></div>
+  <div class="bg-glow glow-2"></div>
+  <div class="bg-glow glow-3"></div>
+
+  <!-- Header -->
+  <header class="app-header">
+    <div class="header-container">
+      <div class="brand">
+        <div class="brand-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+          </svg>
+        </div>
+        <div>
+          <div class="brand-title-wrap">
+            <h1 class="brand-title">Study Planner</h1>
+            <span class="badge-tech">AIML & Python Edition</span>
+          </div>
+          <p class="brand-subtitle">Smart priority scoring & algorithmic timetable generator</p>
+        </div>
+      </div>
+
+      <!-- Action Presets -->
+      <div class="presets-bar">
+        <span class="presets-label">Load Template:</span>
+        <button type="button" class="preset-btn active" data-preset="aiml" id="presetAiml">🤖 AIML Prep</button>
+        <button type="button" class="preset-btn" data-preset="cs_core" id="presetCs">⚡ CS Finals</button>
+        <button type="button" class="preset-btn" data-preset="python_essentials" id="presetPy">🐍 Python
+          Essentials</button>
+      </div>
+
+      <!-- Quick Action / Timer Button & Theme Toggle -->
+      <div class="header-actions">
+        <button id="themeToggleBtn" class="btn btn-secondary theme-toggle-btn" title="Toggle Day/Night Mode"
+          aria-label="Toggle theme">
+          <span class="theme-icon moon-icon" id="themeMoonIcon">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+            </svg>
+          </span>
+          <span class="theme-icon sun-icon" id="themeSunIcon" style="display:none;">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="5"></circle>
+              <line x1="12" y1="1" x2="12" y2="3"></line>
+              <line x1="12" y1="21" x2="12" y2="23"></line>
+              <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+              <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+              <line x1="1" y1="12" x2="3" y2="12"></line>
+              <line x1="21" y1="12" x2="23" y2="12"></line>
+              <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+              <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+            </svg>
+          </span>
+          <span class="theme-label" id="themeLabel">Night</span>
+        </button>
+
+        <button id="openTimerBtn" class="btn btn-secondary timer-toggle-btn" title="Open Focus Timer">
+          <span class="timer-dot"></span>
+          <span>Focus Timer</span>
+          <span class="timer-display-preview" id="timerPreview">25:00</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main App Layout -->
+  <main class="main-wrapper">
+    <div class="app-grid">
+
+      <!-- LEFT COLUMN: INPUT CONTROLS -->
+      <section class="panel input-panel" aria-label="Study Parameters and Subjects">
+        <div class="panel-header">
+          <div class="panel-title-group">
+            <span class="step-num">1</span>
+            <h2>Configuration & Subjects</h2>
+          </div>
+          <button id="addSubjectBtn" class="btn btn-sm btn-primary">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <line x1="12" y1="5" x2="12" y2="19"></line>
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
+            Add Subject
+          </button>
+        </div>
+
+        <!-- Global Constraint Settings -->
+        <div class="settings-card">
+          <div class="setting-row">
+            <div class="setting-label">
+              <label for="availableHours">Daily Available Study Hours</label>
+              <span class="setting-val-badge" id="hoursValDisplay">6.0 hrs</span>
+            </div>
+            <input type="range" id="availableHours" min="1" max="14" step="0.5" value="6.0" class="custom-range">
+            <div class="range-markers">
+              <span>1h (Light)</span>
+              <span>4h (Standard)</span>
+              <span>8h (Intensive)</span>
+              <span>14h (Max)</span>
+            </div>
+          </div>
+
+          <div class="settings-two-col">
+            <div class="input-group">
+              <label for="startTime">Daily Study Start Time</label>
+              <input type="time" id="startTime" value="09:00" class="custom-input">
+            </div>
+            <div class="input-group">
+              <label for="sessionLength">Study Session Block</label>
+              <select id="sessionLength" class="custom-select">
+                <option value="30">30 min (Micro-sprints)</option>
+                <option value="45">45 min (Classic)</option>
+                <option value="50" selected>50 min (Standard Pomodoro)</option>
+                <option value="60">60 min (Deep Dive)</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Subjects Container -->
+        <div class="subjects-header">
+          <h3>Your Subjects & Current Standing (<span id="subjectCountBadge">0</span>)</h3>
+          <span class="helper-text">Add your marks, upcoming exam dates, and grasp level</span>
+        </div>
+
+        <div id="subjectsList" class="subjects-list">
+          <!-- Dynamic subject cards rendered via JavaScript -->
+        </div>
+
+        <!-- Generate Action Button -->
+        <div class="generate-action-bar">
+          <button id="generatePlanBtn" class="btn btn-glow-primary btn-block">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+            </svg>
+            Generate Study Plan
+          </button>
+        </div>
+      </section>
+
+      <!-- RIGHT COLUMN: RESULTS & RECOMMENDATIONS -->
+      <section class="panel results-panel" aria-label="Generated Study Plan and Timetable">
+        <div class="panel-header">
+          <div class="panel-title-group">
+            <span class="step-num step-accent">2</span>
+            <h2>Recommended Plan & Timetable</h2>
+          </div>
+          <div class="panel-actions">
+            <button id="printBtn" class="btn btn-sm btn-outline" title="Print or Save PDF">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="6 9 6 2 18 2 18 9"></polyline>
+                <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+                <rect x="6" y="14" width="12" height="8"></rect>
+              </svg>
+              Print / PDF
+            </button>
+            <button id="resetDoneBtn" class="btn btn-sm btn-outline" title="Clear completed tasks">
+              Reset Progress
+            </button>
+          </div>
+        </div>
+
+        <!-- Plan Summary Metrics -->
+        <div class="metrics-grid" id="metricsGrid">
+          <div class="metric-card">
+            <div class="metric-title">Total Study Target</div>
+            <div class="metric-value" id="metricTotalHours">6.0 <span class="metric-unit">hrs/day</span></div>
+            <div class="metric-sub" id="metricSessions">7 Sessions + 6 Breaks</div>
+          </div>
+          <div class="metric-card highlight-danger">
+            <div class="metric-title">Critical Attention</div>
+            <div class="metric-value text-danger" id="metricCritical">2 <span class="metric-unit">subjects</span></div>
+            <div class="metric-sub">Urgent exam or low marks</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-title">Average Current Marks</div>
+            <div class="metric-value text-accent" id="metricAvgMarks">64.2%</div>
+            <div class="metric-sub">Target: 95%+ Mastery</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-title">Today's Progress</div>
+            <div class="metric-value text-success" id="metricProgress">0%</div>
+            <div class="metric-sub" id="metricCompletedCount">0 of 0 completed</div>
+          </div>
+        </div>
+
+        <!-- Priority Breakdown & Hours Allocation -->
+        <div class="analysis-section">
+          <div class="section-title-wrap">
+            <h3 class="section-title">Priority Subjects & Recommended Hours</h3>
+            <span class="math-badge">Weighted Algorithm Output</span>
+          </div>
+
+          <div class="allocation-visual-container">
+            <div class="allocation-bar" id="allocationBar">
+              <!-- Visual multi-segmented bar -->
+            </div>
+          </div>
+
+          <div class="priority-cards-grid" id="priorityCardsGrid">
+            <!-- Rendered priority cards with score, days left, and hours -->
+          </div>
+        </div>
+
+        <!-- Daily Timetable Section -->
+        <div class="timetable-section">
+          <div class="section-title-wrap">
+            <h3 class="section-title">Daily Study Timetable</h3>
+            <div class="timetable-legend">
+              <span class="legend-item"><span class="legend-dot critical"></span>Critical</span>
+              <span class="legend-item"><span class="legend-dot high"></span>High</span>
+              <span class="legend-item"><span class="legend-dot moderate"></span>Moderate</span>
+              <span class="legend-item"><span class="legend-dot rest"></span>Rest Break</span>
+            </div>
+          </div>
+
+          <div class="timetable-flow" id="timetableList">
+            <!-- Timeline items rendered dynamically -->
+          </div>
+        </div>
+
+        <!-- Study Recommendations & Strategy Insight -->
+        <div class="insights-card" id="insightsCard">
+          <div class="insights-header">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="12" y1="16" x2="12" y2="12"></line>
+              <line x1="12" y1="8" x2="12.01" y2="8"></line>
+            </svg>
+            <h4>Strategy Recommendations</h4>
+          </div>
+          <ul class="insights-list" id="insightsList">
+            <li>Review upcoming exams in high-urgency order.</li>
+          </ul>
+        </div>
+      </section>
+
+    </div>
+  </main>
+
+  <!-- POMODORO TIMER MODAL -->
+  <div class="modal-backdrop" id="timerModal">
+    <div class="modal-window">
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <span class="pulse-indicator"></span>
+          <h3>Active Focus Session</h3>
+        </div>
+        <button class="modal-close-btn" id="closeTimerModalBtn" aria-label="Close modal">&times;</button>
+      </div>
+
+      <div class="modal-body">
+        <div class="current-focus-label" id="timerActiveSubject">Machine Learning</div>
+        <div class="current-focus-task" id="timerActiveTask">Deep Dive: Review core formulas and problem sets</div>
+
+        <!-- Circular or Big Numeric Timer -->
+        <div class="timer-dial-container">
+          <div class="timer-clock-display" id="timerClock">25:00</div>
+          <div class="timer-mode-tag" id="timerModeTag">POMODORO WORK</div>
+        </div>
+
+        <!-- Timer Controls -->
+        <div class="timer-controls">
+          <button id="timerToggleBtn" class="btn btn-glow-primary btn-lg">Start Focus</button>
+          <button id="timerResetBtn" class="btn btn-outline">Reset</button>
+          <button id="timerSkipBtn" class="btn btn-outline">Next Interval</button>
+        </div>
+
+        <!-- Quick Duration Selectors -->
+        <div class="timer-presets">
+          <button class="timer-preset-btn active" data-time="25">25m Work</button>
+          <button class="timer-preset-btn" data-time="50">50m Work</button>
+          <button class="timer-preset-btn" data-time="5">5m Break</button>
+          <button class="timer-preset-btn" data-time="15">15m Break</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Notification Toast Container -->
+  <div id="toastContainer" class="toast-container"></div>
+
+  <script src="./static/js/main.js"></script>
+</body>
+
+</html>
