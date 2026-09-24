@@ -1,0 +1,16 @@
+# Python bytecode and cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Local score file
+snake_highscores.json
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
