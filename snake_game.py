@@ -2,19 +2,20 @@
 ================================================================================
 🐍 RETRO NEON SNAKE GAME - PYTHON & TKINTER
 ================================================================================
-An arcade-quality Snake ("Snack") game built with Python and Tkinter.
+An arcade-quality Snake game built with Python and Tkinter.
 Features:
-  - Modern Dark Neon Cyberpunk Aesthetic & Glowing Elements
-  - Snake with animated eyes, flickering tongue & gradient body
+  - Modern Dark Neon Cyberpunk Aesthetic & Glowing Canvas
+  - Gradient body with directional googly eyes and flickering tongue
   - Multiple Snack types:
-      * Crispy Red Apples (Regular Snack)
-      * Golden Super Snacks (Timed bonus with glowing countdown ring)
-  - Particle burst effects on eating snacks
-  - 4 Difficulty Speeds (Casual, Arcade, Fast, Turbo)
-  - 2 Wall Modes: Solid Walls (Classic) & Wrap-Around (Portal)
-  - High Score tracking with persistent JSON storage
-  - Windows Arcade Sound Effects via winsound (threaded, toggleable)
-  - Full keyboard & button controls (Arrows, WASD, Space to Pause/Resume)
+      * Crispy Red Apples (Regular Snack, +10 pts)
+      * Golden Super Snacks (Timed bonus with glowing countdown ring, +50-80 pts)
+  - Particle burst sparkles on eating snacks
+  - 4 Difficulty Speeds: Casual, Arcade, Fast, Turbo
+  - 2 Wall Modes: Solid Walls (Classic) & Wrap Portal (Wrap-Around)
+  - Persistent High Score tracking (snake_highscores.json)
+  - Non-blocking arcade sound effects via winsound
+  - Bulletproof controls: zero-focus steal (takefocus=False), bind_all,
+    rapid keypress suicide prevention, and clean window closing.
 ================================================================================
 """
 
@@ -87,11 +88,12 @@ HIGHSCORE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "snake
 
 
 # ----------------------------------------------------------------------
-# Sound Manager (Daemon Threaded, Non-blocking)
+# Sound Manager (Daemon Threaded, Non-blocking, Lock-Protected)
 # ----------------------------------------------------------------------
 class SoundManager:
     def __init__(self):
         self.enabled = HAS_WINSOUND
+        self._lock = threading.Lock()
 
     def play(self, sound_type):
         if not self.enabled or not HAS_WINSOUND:
@@ -99,6 +101,9 @@ class SoundManager:
         threading.Thread(target=self._play_worker, args=(sound_type,), daemon=True).start()
 
     def _play_worker(self, sound_type):
+        # Non-blocking lock prevents audio driver contention
+        if not self._lock.acquire(blocking=False):
+            return
         try:
             if sound_type == "eat":
                 winsound.Beep(920, 35)
@@ -117,7 +122,9 @@ class SoundManager:
                 winsound.Beep(880, 50)
                 winsound.Beep(1175, 70)
         except Exception:
-            pass  # Audio device busy or unavailable
+            pass
+        finally:
+            self._lock.release()
 
 
 # ----------------------------------------------------------------------
@@ -163,26 +170,25 @@ class SnakeGame:
         self.root.resizable(False, False)
         self.root.configure(bg=BG_COLOR)
 
-        # Set window icon if available or handle gracefully
-        try:
-            self.root.iconbitmap(default="")
-        except Exception:
-            pass
+        # Handle window closing gracefully
+        self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
 
         self.sounds = SoundManager()
         self.high_score = self.load_high_score()
 
         # Game State
-        self.state = "START"  # "START", "RUNNING", "PAUSED", "GAMEOVER"
+        self.state = "START"  # "START", "RUNNING", "PAUSED", "GAMEOVER", "CLOSED"
         self.score = 0
         self.apples_eaten = 0
         self.snake = []
         self.direction = "Right"
         self.next_direction = "Right"
+        self.dir_locked = False
+        self.after_id = None
         self.food = None
         self.golden_food = None
         self.golden_timer = 0
-        self.golden_max_timer = 70  # ~6-7 seconds
+        self.golden_max_timer = 70
         self.particles = []
         self.tongue_flicker = 0
         self.pulse_phase = 0.0
@@ -202,7 +208,7 @@ class SnakeGame:
     def load_high_score(self):
         try:
             if os.path.exists(HIGHSCORE_FILE):
-                with open(HIGHSCORE_FILE, "r") as f:
+                with open(HIGHSCORE_FILE, "r", encoding="utf-8") as f:
                     data = json.load(f)
                     return data.get("high_score", 0)
         except Exception:
@@ -211,7 +217,7 @@ class SnakeGame:
 
     def save_high_score(self):
         try:
-            with open(HIGHSCORE_FILE, "w") as f:
+            with open(HIGHSCORE_FILE, "w", encoding="utf-8") as f:
                 json.dump({"high_score": self.high_score, "updated_at": time.strftime("%Y-%m-%d %H:%M:%S")}, f, indent=2)
         except Exception:
             pass
@@ -267,11 +273,10 @@ class SnakeGame:
         bottom_frame = tk.Frame(self.root, bg=BG_COLOR, padx=14, pady=6)
         bottom_frame.pack(fill=tk.X)
 
-        # Row 1: Action Buttons & Toggles
+        # Row 1: Action Buttons (takefocus=False prevents keyboard focus stealing)
         btn_frame = tk.Frame(bottom_frame, bg=BG_COLOR)
         btn_frame.pack(fill=tk.X, pady=2)
 
-        # Primary Action Button (Play / Pause / Restart)
         self.btn_main = tk.Button(
             btn_frame,
             text="▶ Start Game",
@@ -284,11 +289,11 @@ class SnakeGame:
             padx=12,
             pady=4,
             cursor="hand2",
+            takefocus=False,
             command=self.handle_main_button
         )
         self.btn_main.pack(side=tk.LEFT, padx=3)
 
-        # Restart Button
         self.btn_restart = tk.Button(
             btn_frame,
             text="🔄 Reset",
@@ -301,11 +306,11 @@ class SnakeGame:
             padx=8,
             pady=4,
             cursor="hand2",
+            takefocus=False,
             command=self.reset_game
         )
         self.btn_restart.pack(side=tk.LEFT, padx=3)
 
-        # Difficulty Switcher Button
         self.btn_diff = tk.Button(
             btn_frame,
             text=f"⚡ {self.difficulty}",
@@ -318,11 +323,11 @@ class SnakeGame:
             padx=8,
             pady=4,
             cursor="hand2",
+            takefocus=False,
             command=self.cycle_difficulty
         )
         self.btn_diff.pack(side=tk.LEFT, padx=3)
 
-        # Wall Mode Toggle (Wrap vs Solid)
         self.btn_walls = tk.Button(
             btn_frame,
             text="🧱 Solid Walls",
@@ -335,11 +340,11 @@ class SnakeGame:
             padx=8,
             pady=4,
             cursor="hand2",
+            takefocus=False,
             command=self.toggle_walls
         )
         self.btn_walls.pack(side=tk.LEFT, padx=3)
 
-        # Sound Toggle
         self.btn_sound = tk.Button(
             btn_frame,
             text="🔊 Sound",
@@ -352,6 +357,7 @@ class SnakeGame:
             padx=8,
             pady=4,
             cursor="hand2",
+            takefocus=False,
             command=self.toggle_sound
         )
         self.btn_sound.pack(side=tk.RIGHT, padx=3)
@@ -367,59 +373,51 @@ class SnakeGame:
         guide_lbl.pack(pady=4)
 
     # ------------------------------------------------------------------
-    # Key Bindings
+    # Key Bindings (bind_all ensures keypresses work regardless of focus)
     # ------------------------------------------------------------------
     def bind_events(self):
-        self.root.bind("<Left>", lambda e: self.change_direction("Left"))
-        self.root.bind("<Right>", lambda e: self.change_direction("Right"))
-        self.root.bind("<Up>", lambda e: self.change_direction("Up"))
-        self.root.bind("<Down>", lambda e: self.change_direction("Down"))
+        for key in ("<Left>", "<a>", "<A>"):
+            self.root.bind_all(key, lambda e: self.change_direction("Left"))
+        for key in ("<Right>", "<d>", "<D>"):
+            self.root.bind_all(key, lambda e: self.change_direction("Right"))
+        for key in ("<Up>", "<w>", "<W>"):
+            self.root.bind_all(key, lambda e: self.change_direction("Up"))
+        for key in ("<Down>", "<s>", "<S>"):
+            self.root.bind_all(key, lambda e: self.change_direction("Down"))
 
-        self.root.bind("<a>", lambda e: self.change_direction("Left"))
-        self.root.bind("<d>", lambda e: self.change_direction("Right"))
-        self.root.bind("<w>", lambda e: self.change_direction("Up"))
-        self.root.bind("<s>", lambda e: self.change_direction("Down"))
-
-        self.root.bind("<A>", lambda e: self.change_direction("Left"))
-        self.root.bind("<D>", lambda e: self.change_direction("Right"))
-        self.root.bind("<W>", lambda e: self.change_direction("Up"))
-        self.root.bind("<S>", lambda e: self.change_direction("Down"))
-
-        self.root.bind("<space>", lambda e: self.handle_space_bar())
-        self.root.bind("<p>", lambda e: self.toggle_pause())
-        self.root.bind("<P>", lambda e: self.toggle_pause())
-        self.root.bind("<r>", lambda e: self.reset_game())
-        self.root.bind("<R>", lambda e: self.reset_game())
-        self.root.bind("<m>", lambda e: self.toggle_sound())
-        self.root.bind("<M>", lambda e: self.toggle_sound())
+        self.root.bind_all("<space>", lambda e: self.handle_space_bar())
+        self.root.bind_all("<p>", lambda e: self.toggle_pause())
+        self.root.bind_all("<P>", lambda e: self.toggle_pause())
+        self.root.bind_all("<r>", lambda e: self.reset_game())
+        self.root.bind_all("<R>", lambda e: self.reset_game())
+        self.root.bind_all("<m>", lambda e: self.toggle_sound())
+        self.root.bind_all("<M>", lambda e: self.toggle_sound())
 
     def change_direction(self, new_dir):
-        if self.state != "RUNNING":
+        if self.state != "RUNNING" or self.dir_locked:
             return
         opposites = {"Up": "Down", "Down": "Up", "Left": "Right", "Right": "Left"}
-        # Prevent 180° instant suicide
-        if new_dir != opposites.get(self.direction):
+        # Check against next_direction to avoid rapid turn suicide bug
+        if new_dir != opposites.get(self.next_direction) and new_dir != self.next_direction:
             self.next_direction = new_dir
+            self.dir_locked = True
 
     def handle_space_bar(self):
-        if self.state == "START" or self.state == "GAMEOVER":
+        if self.state in ("START", "GAMEOVER"):
             self.start_game()
-        elif self.state == "RUNNING":
-            self.toggle_pause()
-        elif self.state == "PAUSED":
+        elif self.state in ("RUNNING", "PAUSED"):
             self.toggle_pause()
 
     def handle_main_button(self):
         if self.state in ("START", "GAMEOVER"):
             self.start_game()
-        elif self.state == "RUNNING":
-            self.toggle_pause()
-        elif self.state == "PAUSED":
+        elif self.state in ("RUNNING", "PAUSED"):
             self.toggle_pause()
 
     def toggle_pause(self):
         if self.state == "RUNNING":
             self.state = "PAUSED"
+            self.cancel_timer()
             self.btn_main.config(text="▶ Resume", bg="#2563eb")
             self.draw_overlay("⏸ PAUSED", "Press [SPACE] or Click Resume", ACCENT_CYAN)
         elif self.state == "PAUSED":
@@ -441,6 +439,8 @@ class SnakeGame:
         else:
             self.btn_walls.config(text="🧱 Solid Walls", fg=TEXT_WHITE)
         self.sounds.play("click")
+        if self.state in ("RUNNING", "PAUSED"):
+            self.render()
 
     def toggle_sound(self):
         self.sound_on = not self.sound_on
@@ -451,10 +451,27 @@ class SnakeGame:
         else:
             self.btn_sound.config(text="🔇 Muted", fg=TEXT_MUTED)
 
+    def cancel_timer(self):
+        if self.after_id:
+            try:
+                self.root.after_cancel(self.after_id)
+            except Exception:
+                pass
+            self.after_id = None
+
+    def on_closing(self):
+        self.state = "CLOSED"
+        self.cancel_timer()
+        try:
+            self.root.destroy()
+        except Exception:
+            pass
+
     # ------------------------------------------------------------------
     # Start / Reset / Game Over Handlers
     # ------------------------------------------------------------------
     def start_game(self):
+        self.cancel_timer()
         self.snake = [
             (GRID_SIZE // 2, GRID_SIZE // 2),
             (GRID_SIZE // 2 - 1, GRID_SIZE // 2),
@@ -462,6 +479,7 @@ class SnakeGame:
         ]
         self.direction = "Right"
         self.next_direction = "Right"
+        self.dir_locked = False
         self.score = 0
         self.apples_eaten = 0
         self.golden_food = None
@@ -476,6 +494,7 @@ class SnakeGame:
         self.game_loop()
 
     def reset_game(self):
+        self.cancel_timer()
         self.state = "START"
         self.score = 0
         self.apples_eaten = 0
@@ -487,6 +506,7 @@ class SnakeGame:
         self.show_start_screen()
 
     def game_over(self):
+        self.cancel_timer()
         self.state = "GAMEOVER"
         self.sounds.play("gameover")
         self.btn_main.config(text="🔄 Play Again", bg="#059669")
@@ -537,7 +557,10 @@ class SnakeGame:
         if self.state != "RUNNING":
             return
 
+        self.cancel_timer()
+
         self.direction = self.next_direction
+        self.dir_locked = False
         head_x, head_y = self.snake[0]
 
         # Calculate new head coordinate
@@ -615,8 +638,9 @@ class SnakeGame:
         self.render()
 
         # Schedule next tick
-        delay = SPEEDS.get(self.difficulty, 90)
-        self.root.after(delay, self.game_loop)
+        if self.state == "RUNNING":
+            delay = SPEEDS.get(self.difficulty, 90)
+            self.after_id = self.root.after(delay, self.game_loop)
 
     def update_score_display(self):
         self.lbl_score.config(text=f"{self.score:03d}")
@@ -628,11 +652,14 @@ class SnakeGame:
     # Rendering Methods
     # ------------------------------------------------------------------
     def render(self):
-        self.canvas.delete("all")
-        self.draw_grid()
-        self.draw_particles()
-        self.draw_food()
-        self.draw_snake()
+        try:
+            self.canvas.delete("all")
+            self.draw_grid()
+            self.draw_particles()
+            self.draw_food()
+            self.draw_snake()
+        except tk.TclError:
+            pass  # Window closed during render
 
     def draw_grid(self):
         # Subtle glowing grid pattern
@@ -663,7 +690,6 @@ class SnakeGame:
             cx = fx * CELL_SIZE + CELL_SIZE / 2
             cy = fy * CELL_SIZE + CELL_SIZE / 2
 
-            # Gentle breathing pulse effect
             pulse = math.sin(self.pulse_phase) * 1.5
             r = (CELL_SIZE / 2 - 2) + pulse
 
@@ -723,7 +749,6 @@ class SnakeGame:
             cx = x * CELL_SIZE + CELL_SIZE / 2
             cy = y * CELL_SIZE + CELL_SIZE / 2
 
-            # Smooth tapering and color transition
             color_idx = min(int((i / max(body_len, 1)) * len(BODY_COLORS)), len(BODY_COLORS) - 1)
             seg_color = BODY_COLORS[color_idx]
 
@@ -733,7 +758,6 @@ class SnakeGame:
                 fill=seg_color, outline="#0f172a", width=1
             )
 
-            # Inner subtle highlight for glossy 3D effect
             inner_r = radius * 0.45
             self.canvas.create_oval(
                 cx - inner_r, cy - inner_r, cx + inner_r, cy + inner_r,
@@ -746,13 +770,11 @@ class SnakeGame:
         hcy = hy * CELL_SIZE + CELL_SIZE / 2
         hradius = CELL_SIZE / 2
 
-        # Head base
         self.canvas.create_oval(
             hcx - hradius, hcy - hradius, hcx + hradius, hcy + hradius,
             fill=SNAKE_HEAD_COLOR, outline="#ffffff", width=1.5
         )
 
-        # Eyes & Tongue positioning based on movement direction
         eye_offset = 6
         pupil_offset = 2
         eye_r = 3.5
@@ -791,13 +813,11 @@ class SnakeGame:
             t_fork1 = (hcx - 3, hcy + hradius + 9)
             t_fork2 = (hcx + 3, hcy + hradius + 9)
 
-        # Draw Flickering Forked Tongue (when in movement)
         if self.tongue_flicker < 3:
             self.canvas.create_line(t_start[0], t_start[1], t_end[0], t_end[1], fill=SNAKE_TONGUE_COLOR, width=2)
             self.canvas.create_line(t_end[0], t_end[1], t_fork1[0], t_fork1[1], fill=SNAKE_TONGUE_COLOR, width=1.5)
             self.canvas.create_line(t_end[0], t_end[1], t_fork2[0], t_fork2[1], fill=SNAKE_TONGUE_COLOR, width=1.5)
 
-        # Draw Eyes
         for ex, ey in (eye1, eye2):
             self.canvas.create_oval(
                 ex - eye_r, ey - eye_r, ex + eye_r, ey + eye_r,
@@ -819,13 +839,11 @@ class SnakeGame:
         mid_x = CANVAS_WIDTH / 2
         mid_y = CANVAS_HEIGHT / 2
 
-        # Card Backdrop
         self.canvas.create_rectangle(
             mid_x - 220, mid_y - 170, mid_x + 220, mid_y + 170,
             fill="#111827", outline="#374151", width=2
         )
 
-        # Title
         self.canvas.create_text(
             mid_x, mid_y - 110,
             text="🐍 NEON SNAKE",
@@ -839,13 +857,11 @@ class SnakeGame:
             fill=ACCENT_CYAN
         )
 
-        # Decorative line
         self.canvas.create_line(
             mid_x - 140, mid_y - 45, mid_x + 140, mid_y - 45,
             fill="#374151", width=1.5
         )
 
-        # Feature bullet points
         items = [
             "🍎 Eat Crispy Red Snacks to Grow (+10 pts)",
             "⭐ Catch Timed Golden Snacks (+50+ pts)",
@@ -860,7 +876,6 @@ class SnakeGame:
                 fill=TEXT_WHITE
             )
 
-        # Call to Action
         self.canvas.create_rectangle(
             mid_x - 150, mid_y + 105, mid_x + 150, mid_y + 145,
             fill="#059669", outline="#34d399", width=2
@@ -876,7 +891,6 @@ class SnakeGame:
         mid_x = CANVAS_WIDTH / 2
         mid_y = CANVAS_HEIGHT / 2
 
-        # Translucent darkened banner
         self.canvas.create_rectangle(
             mid_x - 180, mid_y - 65, mid_x + 180, mid_y + 65,
             fill="#090d16", outline="#334155", width=2
@@ -898,13 +912,11 @@ class SnakeGame:
         mid_x = CANVAS_WIDTH / 2
         mid_y = CANVAS_HEIGHT / 2
 
-        # Card Backdrop
         self.canvas.create_rectangle(
             mid_x - 210, mid_y - 160, mid_x + 210, mid_y + 160,
             fill="#0f172a", outline=ACCENT_RED, width=2
         )
 
-        # Game Over Banner
         self.canvas.create_text(
             mid_x, mid_y - 110,
             text="GAME OVER",
@@ -912,7 +924,6 @@ class SnakeGame:
             fill=ACCENT_RED
         )
 
-        # High Score Celebration if achieved
         if is_new_high:
             self.canvas.create_text(
                 mid_x, mid_y - 65,
@@ -928,7 +939,6 @@ class SnakeGame:
                 fill=TEXT_MUTED
             )
 
-        # Score Summary Table
         self.canvas.create_text(
             mid_x - 50, mid_y - 20,
             text="Final Score:",
@@ -974,7 +984,6 @@ class SnakeGame:
             anchor="w"
         )
 
-        # Restart Call to Action
         self.canvas.create_rectangle(
             mid_x - 140, mid_y + 95, mid_x + 140, mid_y + 135,
             fill="#059669", outline="#34d399", width=2
