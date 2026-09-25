@@ -28,6 +28,13 @@
     "date": "2026-09-25 23:24"
   },
   {
+    "name": "TestChampion",
+    "score": 450,
+    "difficulty": "Speedy",
+    "snacks": 12,
+    "date": "2026-09-25 23:48"
+  },
+  {
     "name": "RetroCoder",
     "score": 349,
     "date": "2026-09-23",

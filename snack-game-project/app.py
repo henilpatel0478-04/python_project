@@ -7,12 +7,29 @@ import json
 from datetime import datetime
 from flask import Flask, jsonify, request, render_template
 
-# Initialize Flask App
-app = Flask(__name__, template_folder="templates", static_folder="static")
-
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-HIGHSCORE_FILE = os.path.join(BASE_DIR, "highscore.json")
-LEADERBOARD_FILE = os.path.join(BASE_DIR, "leaderboard.json")
+TEMPLATE_DIR = os.path.join(BASE_DIR, "templates")
+STATIC_DIR = os.path.join(BASE_DIR, "static")
+
+# Initialize Flask App with absolute template and static directories
+app = Flask(__name__, template_folder=TEMPLATE_DIR, static_folder=STATIC_DIR)
+
+# File paths (handle Vercel serverless read-only filesystem by using /tmp when deployed)
+IS_VERCEL = bool(os.environ.get("VERCEL"))
+
+def get_read_path(filename: str) -> str:
+    """Return file path for reading, preferring /tmp on Vercel if updated."""
+    if IS_VERCEL:
+        tmp_file = os.path.join("/tmp", filename)
+        if os.path.exists(tmp_file):
+            return tmp_file
+    return os.path.join(BASE_DIR, filename)
+
+def get_write_path(filename: str) -> str:
+    """Return file path for writing (use /tmp on Vercel to avoid read-only errors)."""
+    if IS_VERCEL:
+        return os.path.join("/tmp", filename)
+    return os.path.join(BASE_DIR, filename)
 
 # Snack metadata definitions for web client and API
 SNACK_METADATA = [
@@ -98,9 +115,10 @@ SNACK_METADATA = [
 
 def load_high_score() -> int:
     """Read the current global high score from highscore.json."""
-    if os.path.exists(HIGHSCORE_FILE):
+    read_file = get_read_path("highscore.json")
+    if os.path.exists(read_file):
         try:
-            with open(HIGHSCORE_FILE, "r", encoding="utf-8") as f:
+            with open(read_file, "r", encoding="utf-8") as f:
                 data = json.load(f)
                 return int(data.get("high_score", 0))
         except (json.JSONDecodeError, ValueError, IOError):
@@ -113,7 +131,8 @@ def save_high_score(score: int) -> bool:
     current = load_high_score()
     if score > current:
         try:
-            with open(HIGHSCORE_FILE, "w", encoding="utf-8") as f:
+            write_file = get_write_path("highscore.json")
+            with open(write_file, "w", encoding="utf-8") as f:
                 json.dump({"high_score": score}, f, indent=2)
             return True
         except IOError:
@@ -123,9 +142,10 @@ def save_high_score(score: int) -> bool:
 
 def load_leaderboard():
     """Retrieve leaderboard entries or initialize defaults."""
-    if os.path.exists(LEADERBOARD_FILE):
+    read_file = get_read_path("leaderboard.json")
+    if os.path.exists(read_file):
         try:
-            with open(LEADERBOARD_FILE, "r", encoding="utf-8") as f:
+            with open(read_file, "r", encoding="utf-8") as f:
                 return json.load(f)
         except (json.JSONDecodeError, IOError):
             pass
@@ -139,7 +159,8 @@ def load_leaderboard():
         {"name": "RetroCoder", "score": int(high * 0.35), "date": "2026-09-23", "difficulty": "Chill", "snacks": 9},
     ]
     try:
-        with open(LEADERBOARD_FILE, "w", encoding="utf-8") as f:
+        write_file = get_write_path("leaderboard.json")
+        with open(write_file, "w", encoding="utf-8") as f:
             json.dump(default_entries, f, indent=2)
     except IOError:
         pass
@@ -162,7 +183,8 @@ def add_leaderboard_entry(name: str, score: int, difficulty: str = "Classic", sn
     entries = entries[:15]
 
     try:
-        with open(LEADERBOARD_FILE, "w", encoding="utf-8") as f:
+        write_file = get_write_path("leaderboard.json")
+        with open(write_file, "w", encoding="utf-8") as f:
             json.dump(entries, f, indent=2)
     except IOError:
         pass
